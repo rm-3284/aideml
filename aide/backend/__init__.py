@@ -9,8 +9,7 @@ logger = logging.getLogger("aide")
 VALID_PROVIDERS = {"openai", "anthropic", "openrouter", "gemini", "vllm"}
 
 
-def _get_forced_provider() -> str | None:
-    provider = os.getenv("AIDE_PROVIDER") or os.getenv("AIDE_FORCE_PROVIDER")
+def _normalize_provider(provider: str | None) -> str | None:
     if not provider:
         return None
     provider = provider.strip().lower()
@@ -20,10 +19,27 @@ def _get_forced_provider() -> str | None:
     return None
 
 
+def _get_forced_provider() -> str | None:
+    return _normalize_provider(os.getenv("AIDE_PROVIDER") or os.getenv("AIDE_FORCE_PROVIDER"))
+
+
+def _get_model_specific_provider(model: str) -> str | None:
+    code_model = os.getenv("AIDE_CODE_MODEL")
+    feedback_model = os.getenv("AIDE_FEEDBACK_MODEL")
+    if code_model and model == code_model:
+        return _normalize_provider(os.getenv("AIDE_CODE_PROVIDER"))
+    if feedback_model and model == feedback_model:
+        return _normalize_provider(os.getenv("AIDE_FEEDBACK_PROVIDER"))
+    return None
+
+
 def determine_provider(model: str) -> str:
     forced_provider = _get_forced_provider()
     if forced_provider:
         return forced_provider
+    model_specific_provider = _get_model_specific_provider(model)
+    if model_specific_provider:
+        return model_specific_provider
     # Check if model matches OpenAI patterns first
     if re.match(r"^(gpt-.*|o\d+(-.*)?|codex-mini-latest)$", model):
         return "openai"
