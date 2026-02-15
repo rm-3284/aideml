@@ -1,4 +1,4 @@
-from . import backend_anthropic, backend_openai, backend_openrouter, backend_gemini
+from . import backend_anthropic, backend_openai, backend_openrouter, backend_gemini, backend_vllm
 from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
 import re
 import logging
@@ -15,8 +15,14 @@ def determine_provider(model: str) -> str:
         return "anthropic"
     elif model.startswith("gemini-"):
         return "gemini"
-    # If OPENAI_BASE_URL is set, use openai provider for non-standard models
-    elif os.getenv("OPENAI_BASE_URL"):
+    elif model.startswith("vllm-"):
+        return "vllm"
+    # If a custom OpenAI-compatible base URL is set, use openai provider
+    elif (
+        os.getenv("OPENAI_BASE_URL")
+        or os.getenv("OPENAI_API_BASE")
+        or os.getenv("VLLM_API_BASE")
+    ):
         return "openai"
     # all other models are handle by openrouter
     else:
@@ -28,6 +34,7 @@ provider_to_query_func = {
     "anthropic": backend_anthropic.query,
     "openrouter": backend_openrouter.query,
     "gemini": backend_gemini.query,
+    "vllm": backend_vllm.query,
 }
 
 

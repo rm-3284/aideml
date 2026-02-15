@@ -14,6 +14,14 @@ logger = logging.getLogger("aide")
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
+
+def _get_custom_base_url() -> str | None:
+    return (
+        os.getenv("OPENAI_BASE_URL")
+        or os.getenv("OPENAI_API_BASE")
+        or os.getenv("VLLM_API_BASE")
+    )
+
 _client: openai.OpenAI = None  # type: ignore
 _custom_client: openai.OpenAI = None  # type: ignore
 
@@ -37,7 +45,7 @@ def _setup_openai_client():
 def _setup_custom_client():
     global _custom_client
     # Only create custom client if base URL is set
-    base_url = os.getenv("OPENAI_BASE_URL")
+    base_url = _get_custom_base_url()
     api_key = os.getenv("OPENAI_API_KEY")
     if base_url:
         _custom_client = openai.OpenAI(
@@ -71,7 +79,8 @@ def query(
     # Use different API based on whether this is a non-OpenAI model with custom base URL
     model_name = filtered_kwargs.get("model", "")
     is_openai_model = re.match(r"^(gpt-|o\d-|codex-mini-latest$)", model_name)
-    use_chat_api = os.getenv("OPENAI_BASE_URL") is not None and not is_openai_model
+    custom_base_url = _get_custom_base_url()
+    use_chat_api = custom_base_url is not None and not is_openai_model
 
     if use_chat_api:
         _setup_custom_client()
