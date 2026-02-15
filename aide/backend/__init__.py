@@ -6,8 +6,24 @@ import os
 
 logger = logging.getLogger("aide")
 
+VALID_PROVIDERS = {"openai", "anthropic", "openrouter", "gemini", "vllm"}
+
+
+def _get_forced_provider() -> str | None:
+    provider = os.getenv("AIDE_PROVIDER") or os.getenv("AIDE_FORCE_PROVIDER")
+    if not provider:
+        return None
+    provider = provider.strip().lower()
+    if provider in VALID_PROVIDERS:
+        return provider
+    logger.warning("Unknown AIDE provider override: %s", provider)
+    return None
+
 
 def determine_provider(model: str) -> str:
+    forced_provider = _get_forced_provider()
+    if forced_provider:
+        return forced_provider
     # Check if model matches OpenAI patterns first
     if re.match(r"^(gpt-.*|o\d+(-.*)?|codex-mini-latest)$", model):
         return "openai"
@@ -15,8 +31,6 @@ def determine_provider(model: str) -> str:
         return "anthropic"
     elif model.startswith("gemini-"):
         return "gemini"
-    elif model.startswith("vllm-"):
-        return "vllm"
     # If a custom OpenAI-compatible base URL is set, use openai provider
     elif (
         os.getenv("OPENAI_BASE_URL")
