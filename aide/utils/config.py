@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Hashable, cast
+import os
 
 import coolname
 import rich
@@ -16,11 +17,17 @@ from . import tree_export
 from . import copytree, preproc_data, serialize
 
 shutup.mute_warnings()
+
+# Read log level from environment variable, default to WARNING
+log_level = os.getenv("AIDE_LOG_LEVEL", "WARNING").upper()
+if log_level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+    log_level = "WARNING"
+
 logging.basicConfig(
-    level="WARNING", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
+    level=log_level, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
 )
 logger = logging.getLogger("aide")
-logger.setLevel(logging.WARNING)
+logger.setLevel(getattr(logging, log_level))
 
 
 """ these dataclasses are just for type hinting, the actual config is in config.yaml """
@@ -136,6 +143,20 @@ def prep_cfg(cfg: Config):
 
     cfg.log_dir = (top_log_dir / cfg.exp_name).resolve()
     cfg.workspace_dir = (top_workspace_dir / cfg.exp_name).resolve()
+
+    # Create log directory and add file handler for detailed logging
+    cfg.log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = cfg.log_dir / "aide_detailed.log"
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(getattr(logging, log_level))
+    file_formatter = logging.Formatter(
+        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+    logger.info(f"AIDE starting with log level: {log_level}")
+    logger.info(f"Detailed logs saved to: {log_file}")
 
     # validate the config
     cfg_schema: Config = OmegaConf.structured(Config)
