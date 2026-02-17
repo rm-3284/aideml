@@ -179,14 +179,25 @@ class Journal(DataClassJsonMixin):
             nodes = self.nodes
         return max(nodes, key=lambda n: n.metric)
 
-    def generate_summary(self, include_code: bool = False) -> str:
-        """Generate a summary of the journal for the agent."""
+    def generate_summary(self, include_code: bool = False, max_nodes: int = 3) -> str:
+        """Generate a summary of the journal for the agent.
+        
+        Limits context length by:
+        - Only including top max_nodes recent good nodes
+        - Skipping full code/analysis to minimize token usage
+        
+        Args:
+            include_code: Whether to include code in the summary
+            max_nodes: Maximum number of nodes to include (limits context size)
+        """
         summary = []
-        for n in self.good_nodes:
+        # Include only the best performing recent nodes to limit context length
+        nodes_to_include = self.good_nodes[-max_nodes:] if self.good_nodes else []
+        
+        for n in nodes_to_include:
+            # Keep summary minimal to avoid context overflow
             summary_part = f"Design: {n.plan}\n"
-            if include_code:
-                summary_part += f"Code: {n.code}\n"
-            summary_part += f"Results: {n.analysis}\n"
+            # Only include metric, not full analysis which can be very verbose
             summary_part += f"Validation Metric: {n.metric.value}\n"
             summary.append(summary_part)
         return "\n-------------------------------\n".join(summary)
