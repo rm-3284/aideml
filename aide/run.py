@@ -1,6 +1,7 @@
 import atexit
 import logging
 import shutil
+import time
 
 from . import backend
 
@@ -69,6 +70,10 @@ def run():
 
     atexit.register(cleanup)
 
+    # Track start time for timeout monitoring
+    start_time = time.time()
+    time_limit_secs = cfg.exec.time_limit_secs
+
     journal = Journal()
     agent = Agent(
         task_desc=task_desc,
@@ -130,6 +135,27 @@ def run():
             screen=True,
         ) as live:
             while global_step < cfg.agent.steps:
+                # Check if we're approaching the time limit
+                if time_limit_secs is not None:
+                    elapsed = time.time() - start_time
+                    remaining = time_limit_secs - elapsed
+                    
+                    # Leave 5 minutes buffer to save before timeout
+                    if remaining < 300:
+                        logger.warning(
+                            f"Approaching time limit. Elapsed: {elapsed:.0f}s, "
+                            f"Remaining: {remaining:.0f}s. Stopping to save results."
+                        )
+                        save_run(cfg, journal)
+                        break
+                    
+                    # Log warning when approaching halfway
+                    if remaining < 600 and remaining > 300:
+                        logger.info(
+                            f"Time warning: {remaining:.0f}s remaining "
+                            f"({remaining/60:.1f} minutes)"
+                        )
+                
                 agent.step(exec_callback=exec_callback)
                 save_run(cfg, journal)
                 global_step = len(journal)

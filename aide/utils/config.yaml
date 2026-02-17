@@ -20,9 +20,10 @@ exp_name: null # a random experiment name will be generated if not provided
 
 # settings for code execution
 exec:
-  timeout: 3600
+  timeout: 3600  # timeout for individual code execution
   agent_file_name: runfile.py
   format_tb_ipython: False
+  time_limit_secs: null  # overall agent time limit (None = no limit)
 
 generate_report: True
 # LLM settings for final report from journal
