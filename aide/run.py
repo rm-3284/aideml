@@ -123,17 +123,25 @@ def run():
             subtitle="Press [b]Ctrl+C[/b] to stop the run",
         )
 
-    with Live(
-        generate_live(),
-        refresh_per_second=16,
-        screen=True,
-    ) as live:
-        while global_step < cfg.agent.steps:
-            agent.step(exec_callback=exec_callback)
-            save_run(cfg, journal)
-            global_step = len(journal)
-            live.update(generate_live())
-    interpreter.cleanup_session()
+    try:
+        with Live(
+            generate_live(),
+            refresh_per_second=16,
+            screen=True,
+        ) as live:
+            while global_step < cfg.agent.steps:
+                agent.step(exec_callback=exec_callback)
+                save_run(cfg, journal)
+                global_step = len(journal)
+                live.update(generate_live())
+    except Exception as e:
+        # Save journal even if agent crashes
+        logger.error(f"Agent encountered an error: {e}")
+        logger.error("Saving current progress before exiting...")
+        save_run(cfg, journal)
+        raise
+    finally:
+        interpreter.cleanup_session()
 
     if cfg.generate_report:
         print("Generating final report from journal...")
