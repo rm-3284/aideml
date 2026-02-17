@@ -277,21 +277,27 @@ class Agent:
         if not self.journal.nodes or self.data_preview is None:
             self.update_data_preview()
 
-        parent_node = self.search_policy()
-        logger.debug(f"Agent is generating code, parent node type: {type(parent_node)}")
+        try:
+            parent_node = self.search_policy()
+            logger.debug(f"Agent is generating code, parent node type: {type(parent_node)}")
 
-        if parent_node is None:
-            result_node = self._draft()
-        elif parent_node.is_buggy:
-            result_node = self._debug(parent_node)
-        else:
-            result_node = self._improve(parent_node)
+            if parent_node is None:
+                result_node = self._draft()
+            elif parent_node.is_buggy:
+                result_node = self._debug(parent_node)
+            else:
+                result_node = self._improve(parent_node)
 
-        self.parse_exec_result(
-            node=result_node,
-            exec_result=exec_callback(result_node.code, True),
-        )
-        self.journal.append(result_node)
+            self.parse_exec_result(
+                node=result_node,
+                exec_result=exec_callback(result_node.code, True),
+            )
+            self.journal.append(result_node)
+        except Exception as e:
+            # Log the error but continue to next iteration instead of crashing
+            logger.error(f"Step failed with error: {type(e).__name__}: {e}")
+            logger.error("Continuing to next iteration...")
+            # Don't re-raise, allow the agent to continue
 
     def parse_exec_result(self, node: Node, exec_result: ExecutionResult):
         logger.info(f"Agent is parsing execution results for node {node.id}")
