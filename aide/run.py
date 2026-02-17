@@ -80,9 +80,12 @@ def run():
         cfg=cfg,
         journal=journal,
     )
+    # Filter out time_limit_secs from exec config before passing to Interpreter
+    exec_config = OmegaConf.to_container(cfg.exec)  # type: ignore
+    exec_config.pop("time_limit_secs", None)
     interpreter = Interpreter(
         cfg.workspace_dir,
-        **OmegaConf.to_container(cfg.exec),  # type: ignore
+        **exec_config,
     )
 
     global_step = len(journal)
