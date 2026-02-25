@@ -35,14 +35,28 @@ G = TypeVar("G", bound=dataclasses_json.DataClassJsonMixin)
 
 def loads_json(s: str, cls: Type[G]) -> G:
     """Deserialize JSON to AIDE dataclasses."""
+
+    import logging
     obj_dict = json.loads(s)
     obj = cls.from_dict(obj_dict)
 
+    # Validate node.step for Journal nodes
     if isinstance(obj, Journal):
+        valid_nodes = []
+        for n in obj.nodes:
+            if not (isinstance(n.step, int) and n.step >= 0):
+                logging.warning(f"Invalid node.step detected during deserialization: node.id={n.id}, step={n.step}. Setting to None.")
+                n.step = None
+            valid_nodes.append(n)
+        obj.nodes = valid_nodes
+
         id2nodes = {n.id: n for n in obj.nodes}
         for child_id, parent_id in obj_dict["node2parent"].items():
-            id2nodes[child_id].parent = id2nodes[parent_id]
-            id2nodes[child_id].__post_init__()
+            if child_id in id2nodes and parent_id in id2nodes:
+                id2nodes[child_id].parent = id2nodes[parent_id]
+                id2nodes[child_id].__post_init__()
+            else:
+                logging.warning(f"Invalid parent/child reference in node2parent: child_id={child_id}, parent_id={parent_id}")
     return obj
 
 
