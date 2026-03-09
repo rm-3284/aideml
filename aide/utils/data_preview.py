@@ -10,6 +10,10 @@ import pandas as pd
 from genson import SchemaBuilder
 from pandas.api.types import is_numeric_dtype
 
+# Guard rails for data preview to avoid OOM on very large tabular files.
+CSV_SIZE_LIMIT_BYTES = 200 * 1024 * 1024
+CSV_SAMPLE_NROWS = 1000
+
 # these files are treated as code (e.g. markdown wrapped)
 code_files = {".py", ".sh", ".yaml", ".yml", ".md", ".html", ".xml", ".log", ".rst"}
 # we treat these files as text (rather than binary) files
@@ -93,6 +97,28 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
     Returns:
         str: the textual preview
     """
+    file_size = p.stat().st_size
+
+    # Never fully load very large CSVs in preview mode.
+    if file_size > CSV_SIZE_LIMIT_BYTES:
+        try:
+            df = pd.read_csv(p, nrows=CSV_SAMPLE_NROWS)
+            out = [
+                (
+                    f"-> {file_name} is {humanize.naturalsize(file_size)}; "
+                    f"preview sampled first {len(df)} rows to avoid high memory usage."
+                ),
+                f"The sampled columns are: {', '.join(df.columns.tolist()[:15])}",
+            ]
+            if len(df.columns) > 15:
+                out[-1] += f"... and {len(df.columns) - 15} more columns"
+            return "\n".join(out)
+        except Exception as e:
+            return (
+                f"-> {file_name} is {humanize.naturalsize(file_size)} and was not loaded "
+                f"for full preview (reason: {type(e).__name__}: {e})."
+            )
+
     df = pd.read_csv(p)
 
     out = []
