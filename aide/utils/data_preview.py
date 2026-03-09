@@ -29,20 +29,46 @@ def get_file_len_size(f: Path) -> tuple[int, str]:
         return s, humanize.naturalsize(s)
 
 
-def file_tree(path: Path, depth=0) -> str:
-    """Generate a tree structure of files in a directory"""
+def file_tree(
+    path: Path,
+    depth=0,
+    max_files_per_dir=8,
+    max_dirs_per_dir=40,
+    max_depth=3,
+) -> str:
+    """Generate a bounded tree structure of files in a directory."""
     result = []
+    if depth >= max_depth:
+        result.append(f"{' ' * depth * 4}... max depth reached")
+        return "\n".join(result)
+
     files = [p for p in Path(path).iterdir() if not p.is_dir()]
     dirs = [p for p in Path(path).iterdir() if p.is_dir()]
-    max_n = 4 if len(files) > 30 else 8
-    for p in sorted(files)[:max_n]:
-        result.append(f"{' ' * depth * 4}{p.name} ({get_file_len_size(p)[1]})")
-    if len(files) > max_n:
-        result.append(f"{' ' * depth * 4}... and {len(files) - max_n} other files")
 
-    for p in sorted(dirs):
+    # Keep previews compact on datasets with many subfolders (e.g., one folder per sample id).
+    for p in sorted(files)[:max_files_per_dir]:
+        result.append(f"{' ' * depth * 4}{p.name} ({get_file_len_size(p)[1]})")
+    if len(files) > max_files_per_dir:
+        result.append(
+            f"{' ' * depth * 4}... and {len(files) - max_files_per_dir} other files"
+        )
+
+    for p in sorted(dirs)[:max_dirs_per_dir]:
         result.append(f"{' ' * depth * 4}{p.name}/")
-        result.append(file_tree(p, depth + 1))
+        result.append(
+            file_tree(
+                p,
+                depth + 1,
+                max_files_per_dir=max_files_per_dir,
+                max_dirs_per_dir=max_dirs_per_dir,
+                max_depth=max_depth,
+            )
+        )
+
+    if len(dirs) > max_dirs_per_dir:
+        result.append(
+            f"{' ' * depth * 4}... and {len(dirs) - max_dirs_per_dir} other directories"
+        )
 
     return "\n".join(result)
 
