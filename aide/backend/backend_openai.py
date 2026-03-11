@@ -33,6 +33,15 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
 )
 
 
+def _is_unsupported_temperature_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "unsupported parameter" in msg
+        and "temperature" in msg
+        and "not supported" in msg
+    )
+
+
 @once
 def _setup_openai_client():
     global _client
@@ -105,27 +114,36 @@ def query(
 
     t0 = time.time()
 
-    # Attempt the API call
-    try:
+    def _perform_request(request_kwargs: dict):
         if use_chat_api:
             # Use custom client if available, otherwise fall back to default
             client_to_use = _custom_client if _custom_client else _client
-            response = backoff_create(
+            return backoff_create(
                 client_to_use.chat.completions.create,
                 OPENAI_TIMEOUT_EXCEPTIONS,
                 messages=messages,
-                **filtered_kwargs,
+                **request_kwargs,
             )
-        else:
-            response = backoff_create(
-                _client.responses.create,
-                OPENAI_TIMEOUT_EXCEPTIONS,
-                input=messages,
-                **filtered_kwargs,
-            )
+
+        return backoff_create(
+            _client.responses.create,
+            OPENAI_TIMEOUT_EXCEPTIONS,
+            input=messages,
+            **request_kwargs,
+        )
+
+    # Attempt the API call
+    try:
+        response = _perform_request(filtered_kwargs)
     except openai.BadRequestError as e:
+        if _is_unsupported_temperature_error(e) and "temperature" in filtered_kwargs:
+            logger.warning(
+                "Model/endpoint rejected 'temperature'; retrying without temperature."
+            )
+            filtered_kwargs.pop("temperature", None)
+            response = _perform_request(filtered_kwargs)
         # Check whether the error indicates that function calling is not supported
-        if "function calling" in str(e).lower() or "tools" in str(e).lower():
+        elif "function calling" in str(e).lower() or "tools" in str(e).lower():
             logger.warning(
                 "Function calling was attempted but is not supported by this model. "
                 "Falling back to plain text generation."
@@ -135,24 +153,19 @@ def query(
             filtered_kwargs.pop("tool_choice", None)
 
             # Retry without function calling
-            if use_chat_api:
-                # Use custom client if available, otherwise fall back to default
-                client_to_use = _custom_client if _custom_client else _client
-                response = backoff_create(
-                    client_to_use.chat.completions.create,
-                    OPENAI_TIMEOUT_EXCEPTIONS,
-                    messages=messages,
-                    **filtered_kwargs,
-                )
-            else:
-                response = backoff_create(
-                    _client.responses.create,
-                    OPENAI_TIMEOUT_EXCEPTIONS,
-                    input=messages,
-                    **filtered_kwargs,
-                )
+            response = _perform_request(filtered_kwargs)
         else:
             # If it's some other error, re-raise
+            raise
+    except Exception as e:
+        # Some OpenAI-compatible endpoints may surface this as a generic error type.
+        if _is_unsupported_temperature_error(e) and "temperature" in filtered_kwargs:
+            logger.warning(
+                "Model/endpoint rejected 'temperature'; retrying without temperature."
+            )
+            filtered_kwargs.pop("temperature", None)
+            response = _perform_request(filtered_kwargs)
+        else:
             raise
 
     req_time = time.time() - t0
